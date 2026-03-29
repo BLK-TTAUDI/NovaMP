@@ -89,3 +89,6 @@ desktop.ini
 
 # ── Website (hosted separately) ───────────────────────────────────────────────
 web/
+
+# ── Master server backend (private) ───────────────────────────────────────────
+server/
