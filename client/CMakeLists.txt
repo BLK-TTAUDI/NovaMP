@@ -38,7 +38,7 @@ if(WIN32)
         "      VALUE \"InternalName\",     \"novaMP-client\\0\"\n"
         "      VALUE \"ProductName\",      \"NovaMP\\0\"\n"
         "      VALUE \"ProductVersion\",   \"1.0.0\\0\"\n"
-        "      VALUE \"LegalCopyright\",   \"AGPL-3.0\\0\"\n"
+        "      VALUE \"LegalCopyright\",   \"Copyright (c) 2026 NovaMP / BLK-TTAUDI. All rights reserved.\\0\"\n"
         "    END\n"
         "  END\n"
         "  BLOCK \"VarFileInfo\"\n"

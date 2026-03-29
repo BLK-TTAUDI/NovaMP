@@ -1,28 +1,66 @@
-                    GNU AFFERO GENERAL PUBLIC LICENSE
-                       Version 3, 19 November 2007
+NovaMP Source-Available License
+Copyright (c) 2026 NovaMP / BLK-TTAUDI. All rights reserved.
 
- Copyright (C) 2026 NovaMP Contributors
+────────────────────────────────────────────────────────────────────────────────
+GRANT OF RIGHTS
+────────────────────────────────────────────────────────────────────────────────
 
- Everyone is permitted to copy and distribute verbatim copies
- of this license document, but changing it is not allowed.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated source code (the "Software"), to VIEW and
+INSPECT the Software solely for the purpose of verifying its safety, security,
+and behaviour, subject to the restrictions below.
 
-                            Preamble
+────────────────────────────────────────────────────────────────────────────────
+RESTRICTIONS
+────────────────────────────────────────────────────────────────────────────────
 
-  The GNU Affero General Public License is a free, copyleft license for
-software and other kinds of works, specifically designed to ensure
-cooperation with the community in the case of network server software.
+You may NOT, without the prior written permission of the copyright holder:
 
-  The licenses for most software and other practical works are designed
-to take away your freedom to share and change the works.  By contrast,
-our General Public Licenses are intended to guarantee your freedom to
-share and change all versions of a program--to make sure it remains free
-software for all its users.
+  1. Copy, reproduce, or duplicate the Software or any substantial portion of
+     it in any form or medium.
 
-  When we speak of free software, we are referring to freedom, not
-price.  Our General Public Licenses are designed to make sure that you
-have the freedom to distribute copies of free software (and charge for
-them if you wish), that you receive source code or can get it if you
-want it, that you can change the software or use pieces of it in new
-free programs, and that you know you can do these things.
+  2. Modify, adapt, translate, or create derivative works based on the
+     Software.
 
-  For the full license text see: https://www.gnu.org/licenses/agpl-3.0.txt
+  3. Distribute, sublicense, sell, rent, lease, or otherwise transfer the
+     Software or any portion of it to any third party.
+
+  4. Use the Software, in whole or in part, in any other software project,
+     product, or service — whether commercial or non-commercial.
+
+  5. Reverse-engineer the compiled binaries beyond what is permitted by
+     applicable law for interoperability purposes.
+
+────────────────────────────────────────────────────────────────────────────────
+PERMITTED USE OF BINARIES
+────────────────────────────────────────────────────────────────────────────────
+
+End-users are permitted to:
+
+  - Download and run the official pre-built binaries (client and server)
+    released by the copyright holder at https://github.com/BLK-TTAUDI/NovaMP.
+
+  - Self-host the dedicated server binary on their own hardware for the purpose
+    of running a NovaMP game server accessible to other players.
+
+This binary use permission does not transfer any ownership or source-code
+rights, and does not permit modification or redistribution of the binaries.
+
+────────────────────────────────────────────────────────────────────────────────
+NO WARRANTY
+────────────────────────────────────────────────────────────────────────────────
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+────────────────────────────────────────────────────────────────────────────────
+CONTACT
+────────────────────────────────────────────────────────────────────────────────
+
+To request permission for any use not covered above, please open an issue at:
+https://github.com/BLK-TTAUDI/NovaMP/issues

@@ -170,7 +170,10 @@ docker compose up -d
 
 ## License
 
-GNU Affero General Public License v3.0 — see LICENSE.
+Copyright (c) 2026 NovaMP / BLK-TTAUDI. All rights reserved.
+
+Source code is made available for inspection only. You may not copy, modify,
+or redistribute it. See [LICENSE](LICENSE) for full terms.
 
 NovaMP is not affiliated with or endorsed by BeamNG GmbH or BeamMP.
 BeamNG.drive is a trademark of BeamNG GmbH.
