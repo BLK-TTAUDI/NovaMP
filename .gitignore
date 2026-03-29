@@ -98,3 +98,9 @@ servers/src/sync/ai_traffic.hpp
 servers/src/sync/ai_traffic.cpp
 servers/src/sync/road_network.hpp
 servers/src/sync/road_network.cpp
+servers/src/sync/ai_authority.hpp
+servers/src/sync/ai_authority.cpp
+servers/src/headless_launcher.hpp
+servers/src/headless_launcher.cpp
+servers/Resources/Server/ai_bridge/
+client/Resources/Client/ai_authority.lua
