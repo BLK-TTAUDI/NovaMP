@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  gameserver:
+    build:
+      context: ..
+      dockerfile: servers/Dockerfile
+    image: novaMP-server:latest
+    container_name: novaMP-gameserver
+    restart: unless-stopped
+    ports:
+      - "4444:4444/udp"
+      - "4444:4444/tcp"
+      - "4445:4445/tcp"
+    volumes:
+      - ./ServerConfig.toml:/app/ServerConfig.toml:ro
+      - ./Resources/Server/plugins:/app/Resources/Server/plugins
+    environment:
+      - TZ=UTC

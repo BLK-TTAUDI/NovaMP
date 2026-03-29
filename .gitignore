@@ -1,0 +1,91 @@
+# ── Build output ──────────────────────────────────────────────────────────────
+build/
+out/
+_deps/
+install/
+
+# ── CMake generated files ─────────────────────────────────────────────────────
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+# Keep the actual CMake source files
+*.cmake
+!CMakeLists.txt
+!CMakePresets.json
+
+# ── vcpkg ─────────────────────────────────────────────────────────────────────
+vcpkg/
+vcpkg_installed/
+vcpkg-cache/
+.vcpkg-root
+
+# ── Compiled binaries & libraries ─────────────────────────────────────────────
+*.exe
+*.dll
+*.so
+*.so.*
+*.dylib
+*.a
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# ── Object files ──────────────────────────────────────────────────────────────
+*.o
+*.obj
+*.lo
+*.la
+
+# ── CPack packages ────────────────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tgz
+*.deb
+*.rpm
+*-setup.exe
+
+# ── Runtime / server data ─────────────────────────────────────────────────────
+*.log
+*.db
+*.sqlite
+*.sqlite3
+server/data/
+servers/data/
+servers/Resources/Server/logs/
+
+# ── Config files that may contain secrets ─────────────────────────────────────
+servers/ServerConfig.toml
+servers/ServerConfig.local.toml
+config.local.toml
+.env
+
+# ── IDE — Visual Studio ────────────────────────────────────────────────────────
+.vs/
+*.user
+*.suo
+*.sdf
+*.VC.db
+*.VC.opendb
+ipch/
+
+# ── IDE — VS Code ─────────────────────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+
+# ── IDE — CLion / JetBrains ───────────────────────────────────────────────────
+.idea/
+cmake-build-*/
+
+# ── OS noise ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ── Website (hosted separately) ───────────────────────────────────────────────
+web/

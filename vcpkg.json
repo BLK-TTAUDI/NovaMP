@@ -1,0 +1,16 @@
+{
+  "name": "novaMP",
+  "version": "1.0.0",
+  "dependencies": [
+    "nlohmann-json",
+    "spdlog",
+    "asio",
+    "openssl",
+    "zlib",
+    "sqlite3",
+    "tomlplusplus",
+    "crow",
+    "lua"
+  ],
+  "builtin-baseline": "2024.10.21"
+}

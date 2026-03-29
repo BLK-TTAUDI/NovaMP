@@ -1,0 +1,279 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+# ── Global env ────────────────────────────────────────────────────────────────
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-cache
+
+jobs:
+  # ── Windows builds (client + server) ────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-windows-
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT --depth=1
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --no-progress -y
+
+      - name: Configure (client — Windows)
+        shell: pwsh
+        run: |
+          cmake --preset windows-release `
+            -S "${{ github.workspace }}/client" `
+            -B "${{ github.workspace }}/build/client-win" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build client
+        run: cmake --build ${{ github.workspace }}/build/client-win --config Release --parallel
+
+      - name: Package client (NSIS installer)
+        working-directory: ${{ github.workspace }}/build/client-win
+        run: cpack -C Release -G NSIS
+
+      - name: Configure (server — Windows)
+        shell: pwsh
+        run: |
+          cmake --preset windows-release `
+            -S "${{ github.workspace }}/servers" `
+            -B "${{ github.workspace }}/build/server-win" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build server
+        run: cmake --build ${{ github.workspace }}/build/server-win --config Release --parallel
+
+      - name: Package server (ZIP)
+        working-directory: ${{ github.workspace }}/build/server-win
+        run: cpack -C Release -G ZIP
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: |
+            ${{ github.workspace }}/build/client-win/novaMP-client-win64-setup.exe
+            ${{ github.workspace }}/build/server-win/novaMP-server-win64.zip
+          if-no-files-found: error
+
+  # ── Linux builds (client + server) ──────────────────────────────────────────
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            pkg-config libssl-dev zlib1g-dev \
+            liblua5.3-dev \
+            dpkg-dev
+
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-linux-
+
+      - name: Bootstrap vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git $VCPKG_ROOT --depth=1
+          $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
+          mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
+
+      - name: Configure client (Linux)
+        run: |
+          cmake --preset linux-release \
+            -S ${{ github.workspace }}/client \
+            -B ${{ github.workspace }}/build/client-linux \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build client
+        run: cmake --build ${{ github.workspace }}/build/client-linux --parallel
+
+      - name: Package client (TGZ + DEB)
+        working-directory: ${{ github.workspace }}/build/client-linux
+        run: cpack -G "TGZ;DEB"
+
+      - name: Configure server (Linux)
+        run: |
+          cmake --preset linux-release \
+            -S ${{ github.workspace }}/servers \
+            -B ${{ github.workspace }}/build/server-linux \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build server
+        run: cmake --build ${{ github.workspace }}/build/server-linux --parallel
+
+      - name: Package server (TGZ + DEB)
+        working-directory: ${{ github.workspace }}/build/server-linux
+        run: cpack -G "TGZ;DEB"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            ${{ github.workspace }}/build/client-linux/novaMP-client-linux-amd64.tar.gz
+            ${{ github.workspace }}/build/client-linux/novaMP-client-linux-amd64.deb
+            ${{ github.workspace }}/build/server-linux/novaMP-server-linux-amd64.tar.gz
+            ${{ github.workspace }}/build/server-linux/novaMP-server-linux-amd64.deb
+          if-no-files-found: error
+
+  # ── Docker image ─────────────────────────────────────────────────────────────
+  build-docker:
+    name: Build Docker image
+    runs-on: ubuntu-22.04
+    needs: build-linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: /tmp/artifacts
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "refs/heads/main" ]; then
+            TAG="${{ github.event.inputs.tag || 'latest' }}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ github.workspace }}/servers
+          file: ${{ github.workspace }}/servers/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.tag.outputs.repo }}-server:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ steps.tag.outputs.repo }}-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Generate checksums + create GitHub Release ───────────────────────────────
+  release:
+    name: Publish Release
+    runs-on: ubuntu-22.04
+    needs: [build-windows, build-linux]
+
+    steps:
+      - name: Download Windows packages
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-packages
+          path: /tmp/release
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: /tmp/release
+
+      - name: Generate checksums
+        working-directory: /tmp/release
+        run: |
+          sha256sum \
+            novaMP-client-win64-setup.exe \
+            novaMP-client-linux-amd64.tar.gz \
+            novaMP-client-linux-amd64.deb \
+            novaMP-server-win64.zip \
+            novaMP-server-linux-amd64.tar.gz \
+            novaMP-server-linux-amd64.deb \
+            > checksums.txt
+          cat checksums.txt
+
+      - name: Determine release tag
+        id: rel
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: NovaMP ${{ steps.rel.outputs.tag }}
+          body: |
+            ## NovaMP ${{ steps.rel.outputs.tag }}
+
+            ### Client
+            | Platform | File |
+            |----------|------|
+            | Windows 10/11 (64-bit) | `novaMP-client-win64-setup.exe` |
+            | Linux (tar.gz) | `novaMP-client-linux-amd64.tar.gz` |
+            | Linux (.deb) | `novaMP-client-linux-amd64.deb` |
+
+            ### Dedicated Server
+            | Platform | File |
+            |----------|------|
+            | Windows | `novaMP-server-win64.zip` |
+            | Linux (tar.gz) | `novaMP-server-linux-amd64.tar.gz` |
+            | Linux (.deb) | `novaMP-server-linux-amd64.deb` |
+            | Docker | `ghcr.io/${{ github.repository }}-server:${{ steps.rel.outputs.tag }}` |
+
+            SHA-256 checksums are in `checksums.txt`.
+          files: /tmp/release/*
+          draft: false
+          prerelease: ${{ contains(steps.rel.outputs.tag, '-') }}
+          generate_release_notes: true

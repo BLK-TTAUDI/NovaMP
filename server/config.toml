@@ -1,0 +1,29 @@
+[server]
+host          = "0.0.0.0"
+port          = 8080
+log_level     = "info"       # trace|debug|info|warn|error
+log_file      = "master.log"
+
+[database]
+type          = "sqlite"     # sqlite | postgres
+sqlite_path   = "data/novaMP.db"
+
+# For PostgreSQL:
+# type         = "postgres"
+# host         = "localhost"
+# port         = 5432
+# name         = "novaMP"
+# user         = "novaMP"
+# password     = "changeme"
+
+[auth]
+jwt_secret         = "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION"
+jwt_expiry_hours   = 72
+bcrypt_rounds      = 12
+discord_client_id  = ""
+discord_secret     = ""
+discord_redirect   = "http://localhost:8080/auth/discord/callback"
+
+[server_browser]
+max_servers        = 1000
+heartbeat_timeout  = 60      # seconds before a server is removed
