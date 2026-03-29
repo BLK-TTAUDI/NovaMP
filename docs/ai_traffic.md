@@ -1,32 +1,85 @@
 # NovaMP AI Traffic
 
-NovaMP runs AI vehicles entirely on the dedicated game server.  Clients receive
-the same `VEHICLE_UPDATE` (0x08) packets for AI as they do for other players;
+NovaMP runs AI vehicles entirely on the dedicated server. Clients receive
+the same `VEHICLE_UPDATE` (0x08) packets for AI as they do for real players —
 no special client-side code is required.
 
 ---
 
 ## How It Works
 
-1. **Waypoint graph** — on startup the server loads
-   `Resources/Server/waypoints.json` (if present).  Each waypoint has a
-   position and a list of neighbours.  The traffic loop picks a random
-   destination for each AI vehicle and follows the shortest path.
+1. **Road network** — on startup the server loads the road graph for the
+   current map from `Resources/Server/maps/<mapname>/`.  If you exported
+   waypoints from BeamNG (see [Road Network Export](#road-network-export))
+   those are used.  Otherwise the server generates a procedural 400 × 400 m
+   grid at 20 m spacing, which works on any flat map (e.g. `gridmap_v2`)
+   without manual setup.
 
-2. **Procedural fallback** — if no `waypoints.json` exists the server
-   generates a flat 400 × 400 m grid at 20 m spacing centred on the origin.
-   This works on any flat map (e.g. `gridmap_v2`) without manual setup.
+2. **A\* path planning** — each AI vehicle is given a destination node and
+   finds the shortest path through the road graph.  When it arrives it picks
+   a new destination automatically.
 
-3. **Tick loop** — AI runs at `update_rate_hz` (default 20 Hz) independently
-   of the 100 Hz player vehicle sync loop.
+3. **Automatic speed regulation** — you do not need to set a speed.
+   Each vehicle reads the posted speed limit from the road node it is
+   currently targeting and drives at that limit multiplied by its own
+   personality factor.  See [Speed Regulation](#speed-regulation) below.
 
-4. **Spawn / despawn** — AI vehicles only exist near players.  A vehicle
-   spawns within `spawn_dist` metres of a player when the active count is below
-   the target, and despawns when it is more than `despawn_dist` metres from
-   every connected player.
+4. **Player awareness** — the AI scans a 40 m forward arc every tick.
+   When it detects a player or another AI vehicle it slows proportionally,
+   shifts to the other side of the lane to go around, and — if still blocked
+   after 8 seconds — replans to a different route.
 
-5. **Vehicle IDs 200–254** are reserved exclusively for AI.  AI packets use
+5. **Indicators & intersections** — turn signals activate 28 m before any
+   bend greater than ~20°.  At junctions with 3 or more exits the AI slows
+   to 60 % speed and waits if another vehicle is already crossing.
+
+6. **Spawn / despawn** — AI only exists near players.  A vehicle spawns
+   within `spawn_dist` metres of a player when active count is below target,
+   and despawns when further than `despawn_dist` from every connected player.
+
+7. **Vehicle IDs 200–254** are reserved for AI.  Packets use
    `sender_id = 0xFFFF` and `vflags |= VF_IS_AI (0x01)`.
+
+---
+
+## Speed Regulation
+
+Speed is **automatic** — you do not need to configure it.
+
+Each AI vehicle has two speed influences:
+
+| Influence | Description |
+|-----------|-------------|
+| **Road speed limit** | Read from the road node the vehicle is heading toward. Comes from the exported road data or defaults to 14 m/s (~50 km/h) on procedural grids. |
+| **Personality factor** | A random multiplier assigned at spawn: **0.70 – 1.10 ×** the road limit. One vehicle might naturally cruise at 70 % of the limit, another at 110 %. |
+
+On top of those two, speed is reduced dynamically each tick for:
+
+- **Upcoming bends** — the AI looks 4 nodes ahead and measures the sharpest
+  turn angle in the path.  Gentle curves (< 20°) have no effect.  Sharp bends
+  (~70°) bring speed down to roughly 35 % of the cruise speed before the
+  vehicle enters the corner, then it accelerates back out.
+- **Obstacles** — players or AI in the forward arc reduce speed
+  proportionally with distance (full brake at 8 m, gentle coast at 30 m).
+- **Intersections** — 60 % speed on approach; full stop if the junction is
+  occupied by another AI.
+
+### `speed_limit` config option
+
+The `speed_limit` value in `ServerConfig.toml` acts as a **hard ceiling**,
+not the actual cruising speed.  Set it only if you want to cap the maximum
+possible speed (e.g. on a server themed around city driving).
+
+```toml
+# No cap — vehicles drive at road speed limits naturally (recommended)
+speed_limit = 0
+
+# Hard cap at 50 km/h regardless of road data
+speed_limit = 13.9
+```
+
+Setting `speed_limit = 0` (the default) means no cap is applied and the AI
+uses only road data and personality to regulate speed.
 
 ---
 
@@ -39,8 +92,8 @@ enabled        = true
 # Maximum simultaneous AI vehicles (hard cap: 55, IDs 200-254)
 count          = 10
 
-# Speed limit in m/s  (13.9 ≈ 50 km/h)
-speed_limit    = 13.9
+# Hard speed ceiling in m/s.  0 = no cap (recommended — let road data decide).
+speed_limit    = 0
 
 # "traffic" | "random" | "parked"
 mode           = "traffic"
@@ -63,65 +116,60 @@ vehicle_pool   = ["etk800", "etki", "vivace", "covet", "miramar"]
 
 ### Mode descriptions
 
-| Mode      | Description                                                      |
-|-----------|------------------------------------------------------------------|
-| `traffic` | Follow the waypoint graph; respect `speed_limit`                 |
-| `random`  | Teleport between random waypoints; ignore speed limit            |
-| `parked`  | Spawn at a waypoint and remain stationary (decorative traffic)   |
+| Mode      | Description |
+|-----------|-------------|
+| `traffic` | Follow the road graph; respect road speed limits and personality. |
+| `random`  | Roam between random nodes; speed cap from `speed_limit` (or uncapped if 0). |
+| `parked`  | Spawn at a node and stay stationary — decorative parked cars. |
 
 ---
 
-## waypoints.json Format
+## Road Network Export
 
-Place this file at `Resources/Server/waypoints.json`.
+For the best results, export the road network from BeamNG.drive using the
+in-game tool included with the server:
 
-```json
-{
-  "waypoints": [
-    { "id": 0, "x":   0.0, "y":   0.0, "z": 0.0, "neighbors": [1, 4] },
-    { "id": 1, "x":  20.0, "y":   0.0, "z": 0.0, "neighbors": [0, 2] },
-    { "id": 2, "x":  20.0, "y":  20.0, "z": 0.0, "neighbors": [1, 3] },
-    { "id": 3, "x":   0.0, "y":  20.0, "z": 0.0, "neighbors": [2, 0] },
-    { "id": 4, "x": -20.0, "y":   0.0, "z": 0.0, "neighbors": [0]    }
-  ]
-}
-```
+1. Load the map in BeamNG.drive.
+2. Open the Lua console (`~`) and run:
+   ```lua
+   exec("Resources/Server/tools/export_roads.lua")
+   ```
+3. Copy the generated `novaMP_roads.json` from your
+   `levels/<mapname>/` folder to
+   `Resources/Server/maps/<mapname>/novaMP_roads.json` on the server.
 
-**Rules:**
-- IDs must be unique non-negative integers.
-- `neighbors` lists the IDs of directly reachable waypoints (one-way edges are
-  fine; the path planner follows directed edges).
-- Coordinates are world-space metres matching BeamNG.drive's coordinate system.
-- Minimum recommended spacing: 5 m (closer may cause jitter at high speed).
-- The waypoint graph does not need to be fully connected; isolated sub-graphs
-  are fine — AI vehicles will stay within their connected component.
+The exported file includes per-node speed limits and lane widths, which the
+AI uses directly for speed regulation.  Without it the server falls back to
+the procedural grid with a default 14 m/s limit.
 
 ---
 
 ## Console Commands
 
-Commands can be entered in the server's interactive console (stdin) or sent
-via RCON.
+Commands can be entered in the server console (stdin) or via RCON.
 
-| Command                    | Description                                          |
-|----------------------------|------------------------------------------------------|
-| `ai.status`                | Print current AI state (count, mode, speed limit)    |
-| `ai.spawn <n>`             | Immediately spawn `n` AI vehicles                    |
-| `ai.despawn_all`           | Remove all active AI vehicles                        |
-| `ai.set_count <n>`         | Set the target AI vehicle count (0 to disable)       |
-| `ai.set_speed_limit <mps>` | Set speed limit in metres per second                 |
+| Command                    | Description |
+|----------------------------|-------------|
+| `ai.status`                | Print active count, mode, and speed cap. |
+| `ai.spawn <n>`             | Immediately spawn `n` AI vehicles. |
+| `ai.despawn_all`           | Remove all active AI vehicles. |
+| `ai.set_count <n>`         | Set the target AI vehicle count (0 = disable). |
+| `ai.set_speed_limit <mps>` | Set hard speed ceiling in m/s (0 = remove cap). |
 
 ### Examples
 
 ```
 > ai.status
-AI Traffic — active: 7 / target: 10 | mode: traffic | speed: 13.9 m/s
+AI Traffic — active: 7 / target: 10 | mode: traffic | speed cap: none
 
 > ai.set_count 20
 [AI] Target count set to 20
 
+> ai.set_speed_limit 0
+[AI] Speed cap removed — AI will follow road speed limits
+
 > ai.set_speed_limit 25
-[AI] Speed limit set to 25.0 m/s
+[AI] Speed cap set to 25.0 m/s
 
 > ai.despawn_all
 [AI] All AI vehicles despawned
@@ -131,42 +179,24 @@ AI Traffic — active: 7 / target: 10 | mode: traffic | speed: 13.9 m/s
 
 ## RCON
 
-RCON listens on `rcon_port` (default **4445**) over TCP.  Connect with any
-raw TCP client (e.g. netcat, PuTTY raw mode):
+RCON listens on `rcon_port` (default **4445**) over TCP.
 
 ```
 nc <server-ip> 4445
 ```
 
-1. The server sends: `NovaMP RCON v1.0\n`
+1. Server sends: `NovaMP RCON v1.0\n`
 2. You send: `AUTH <password>\n`
-3. Server responds `OK\n` on success or `DENIED\n` on failure.
-4. Send any console command (one per line); the server echoes the result.
-5. Send `quit` to close the RCON session (does not stop the server).
-
-### RCON session example
-
-```
-NovaMP RCON v1.0
-AUTH myrconpassword
-OK
-players
-Connected players (3): Alice(1) Bob(2) Carol(3)
-ai.status
-AI Traffic — active: 10 / target: 10 | mode: traffic | speed: 13.9 m/s
-say Server maintenance in 10 minutes!
-[Console] Server maintenance in 10 minutes!
-quit
-```
+3. Server responds `OK\n` or `DENIED\n`.
+4. Send console commands one per line; server echoes the result.
+5. Send `quit` to close the session.
 
 ---
 
 ## Lua Plugin Control
 
-Plugins can read and adjust AI Traffic at runtime via `NovaMP.AI.*`:
-
 ```lua
--- Scale AI with player count
+-- Scale AI count with player count; no speed config needed
 function onPlayerJoin(id, name)
     local n = MP.GetPlayerCount()
     NovaMP.AI.setCount(math.min(20, n * 4))
@@ -180,6 +210,15 @@ function onPlayerDisconnect(id, name)
         NovaMP.AI.setCount(math.max(5, n * 4))
     end
 end
+
+-- Optionally cap speed for a specific event (e.g. slow city cruise night)
+function onEventStart()
+    NovaMP.AI.setSpeedLimit(8.3)  -- ~30 km/h cap
+end
+
+function onEventEnd()
+    NovaMP.AI.setSpeedLimit(0)    -- back to automatic
+end
 ```
 
 See [lua_api.md](lua_api.md) for the full `NovaMP.AI.*` reference.
@@ -190,23 +229,22 @@ See [lua_api.md](lua_api.md) for the full `NovaMP.AI.*` reference.
 
 All figures measured on an 8-core / 3.6 GHz server.
 
-| Players | AI vehicles | CPU (ai thread) | Outbound UDP     |
-|---------|-------------|-----------------|------------------|
-| 1       | 10          | < 1 %           | ~75 KB/s         |
-| 16      | 20          | ~2 %            | ~445 KB/s        |
-| 32      | 55 (max)    | ~4 %            | ~1.1 MB/s        |
+| Players | AI vehicles | CPU (ai thread) | Outbound UDP |
+|---------|-------------|-----------------|--------------|
+| 1       | 10          | < 1 %           | ~75 KB/s     |
+| 16      | 20          | ~2 %            | ~445 KB/s    |
+| 32      | 55 (max)    | ~4 %            | ~1.1 MB/s    |
 
-AI vehicles broadcast at `update_rate_hz` (default 20 Hz), not 100 Hz, so
-bandwidth cost per AI vehicle is ~5× lower than per player vehicle.
+AI vehicles broadcast at `update_rate_hz` (default 20 Hz), not at the player
+sync rate, so bandwidth per AI vehicle is significantly lower than per player.
 
 ---
 
 ## Known Limitations
 
-- AI vehicles do not collide with each other or with player vehicles
-  (collision is handled locally in BeamNG.drive, not server-side).
-- Path planning is a simple greedy nearest-waypoint advance — no A\* or
-  traffic-light awareness.
-- The procedural grid fallback only suits flat maps; hilly maps should provide
-  a hand-crafted `waypoints.json`.
-- Maximum 55 AI vehicles per server (IDs 200–254 inclusive).
+- AI vehicles do not physically collide with each other or with player
+  vehicles — collision is handled locally inside BeamNG.drive.
+- Procedural grid fallback is only suitable for flat maps.  Hilly or complex
+  maps should use an exported road network for accurate speed limits and
+  natural-looking paths.
+- Maximum 55 simultaneous AI vehicles per server (IDs 200–254 inclusive).

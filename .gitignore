@@ -92,3 +92,9 @@ web/
 
 # ── Master server backend (private) ───────────────────────────────────────────
 server/
+
+# ── Proprietary AI traffic engine (not for public distribution) ───────────────
+servers/src/sync/ai_traffic.hpp
+servers/src/sync/ai_traffic.cpp
+servers/src/sync/road_network.hpp
+servers/src/sync/road_network.cpp
