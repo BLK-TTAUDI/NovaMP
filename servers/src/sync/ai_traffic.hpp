@@ -67,7 +67,11 @@ struct AIVehicle {
     int   path_step    = 0;
     float replan_timer = 0.0f;
 
-    // Speed intent (set from config + per-node limit)
+    // Speed personality: per-vehicle multiplier applied to road speed limits.
+    // Set once at spawn — gives each driver a naturally different pace.
+    float speed_personality = 1.0f;
+
+    // Hard upper cap (mirrors m_speed_limit at spawn; updated by setSpeedLimit).
     float speed_target = 0.0f;
 
     // Behaviour state machine
@@ -139,6 +143,11 @@ private:
     ObstacleInfo  scanForwardArc(const AIVehicle& v) const;
     bool          intersectionAhead(const AIVehicle& v) const;
     bool          intersectionOccupied(int node_idx, const AIVehicle& self) const;
+
+    // ── Speed regulation ─────────────────────────────────────────────────────
+    // Returns base_speed scaled down for any sharp bend in the next
+    // CURVE_LOOKAHEAD nodes on the vehicle's planned path.
+    float computeCurvatureSpeed(const AIVehicle& v, float base_speed) const;
 
     // ── Indicators ───────────────────────────────────────────────────────────
     int  computeIndicator(const AIVehicle& v) const;

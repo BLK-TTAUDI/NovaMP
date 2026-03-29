@@ -42,6 +42,14 @@ static constexpr float INDICATOR_BLINK_HZ  = 1.5f;  // blinks/second
 static constexpr float INTERSECTION_SLOW   = 0.60f; // speed multiplier
 static constexpr float INTERSECTION_STOP_D = 4.0f;  // hold before entering
 
+// Curvature-based speed regulation
+// Turns below CURVE_LIGHT_RAD (~20°) are ignored.
+// At CURVE_SHARP_RAD (~70°) or tighter the speed is scaled to CURVE_MIN_FACTOR.
+static constexpr float CURVE_LIGHT_RAD  = 0.35f;  // radians
+static constexpr float CURVE_SHARP_RAD  = 1.22f;  // radians (~70°)
+static constexpr float CURVE_MIN_FACTOR = 0.35f;  // minimum speed fraction at sharpest bend
+static constexpr int   CURVE_LOOKAHEAD  = 4;      // nodes ahead to scan for bends
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 static float dist2(float ax, float ay, float bx, float by) {
     float dx=ax-bx, dy=ay-by; return std::sqrt(dx*dx+dy*dy);
@@ -91,10 +99,12 @@ void AITraffic::tick(float dt) {
             v.state.pos[2] = pos[2];
             v.state.rot[3] = 1.0f;
             v.state.vflags = VF_IS_AI;
-            v.heading      = ((float)(nextRng() % 10000) / 10000.0f) * TWO_PI;
-            v.speed        = 0.0f;
-            v.speed_target = m_speed_limit *
-                (0.75f + 0.25f * ((float)(nextRng() % 1000) / 1000.0f));
+            v.heading           = ((float)(nextRng() % 10000) / 10000.0f) * TWO_PI;
+            v.speed             = 0.0f;
+            // Personality: 0.70–1.10× the road speed limits.
+            // This gives each vehicle a naturally different cruising pace.
+            v.speed_personality = 0.70f + 0.40f * ((float)(nextRng() % 1000) / 1000.0f);
+            v.speed_target      = m_speed_limit; // hard cap; 0 = unlimited
             v.ai_state      = AIState::DRIVING;
             v.state_timer   = 0.0f;
             v.blocked_timer = 0.0f;
@@ -226,8 +236,18 @@ void AITraffic::tickVehicle(AIVehicle& v, float dt) {
                                  intersectionOccupied(v.path[v.path_step], v);
 
     // ── Speed computation ─────────────────────────────────────────────────────
-    float node_limit = (m_mode == "random") ? m_speed_limit
-                                            : std::min(tgt_node.speed_limit, m_speed_limit);
+    // Base: road node's posted speed limit scaled by this vehicle's personality.
+    // In "random" mode there are no meaningful node limits so use the hard cap.
+    float node_limit = (m_mode == "random")
+        ? m_speed_limit
+        : tgt_node.speed_limit * v.speed_personality;
+
+    // Apply the server-wide hard cap (0 means no cap).
+    if (m_speed_limit > 0.0f)
+        node_limit = std::min(node_limit, m_speed_limit);
+
+    // Reduce for upcoming bends — computed from path curvature lookahead.
+    node_limit = computeCurvatureSpeed(v, node_limit);
 
     // Apply intersection slow-down
     if (at_intersection) node_limit *= INTERSECTION_SLOW;
@@ -415,6 +435,42 @@ void AITraffic::updateIndicatorLights(AIVehicle& v, float dt) {
     }
 }
 
+// ── Curvature-based speed regulation ─────────────────────────────────────────
+// Scans the next CURVE_LOOKAHEAD nodes on the vehicle's path, measures the
+// heading change at each segment junction, and scales base_speed down for
+// the sharpest bend found.  Gentle curves have no effect; hairpins can bring
+// the vehicle down to CURVE_MIN_FACTOR of its normal cruising speed.
+float AITraffic::computeCurvatureSpeed(const AIVehicle& v, float base_speed) const {
+    if (v.path.empty() || v.path_step >= (int)v.path.size()) return base_speed;
+
+    // Walk up to CURVE_LOOKAHEAD consecutive node-pairs and record the
+    // largest heading change (absolute value).
+    float max_turn    = 0.0f;
+    float prev_bearing = v.heading;  // start from the vehicle's current heading
+
+    const int end = std::min(v.path_step + CURVE_LOOKAHEAD, (int)v.path.size());
+    for (int i = v.path_step; i < end; ++i) {
+        // We need two successive nodes to compute a bearing.
+        if (i + 1 >= (int)v.path.size()) break;
+
+        const RoadNode& na = m_road_net.node(v.path[i]);
+        const RoadNode& nb = m_road_net.node(v.path[i + 1]);
+        float bearing = std::atan2(nb.y - na.y, nb.x - na.x);
+        float turn    = std::fabs(wrap(bearing - prev_bearing));
+        if (turn > max_turn) max_turn = turn;
+        prev_bearing = bearing;
+    }
+
+    // Gentle curves — no reduction.
+    if (max_turn <= CURVE_LIGHT_RAD) return base_speed;
+
+    // Linearly interpolate a reduction factor between the light and sharp thresholds.
+    float t      = clamp((max_turn - CURVE_LIGHT_RAD) / (CURVE_SHARP_RAD - CURVE_LIGHT_RAD),
+                         0.0f, 1.0f);
+    float factor = 1.0f - t * (1.0f - CURVE_MIN_FACTOR);
+    return base_speed * factor;
+}
+
 // ── Path planning ─────────────────────────────────────────────────────────────
 void AITraffic::planPath(AIVehicle& v) {
     v.replan_timer = m_cfg.ai_path_replan_secs;
@@ -474,9 +530,10 @@ void AITraffic::spawnVehicle(const std::string& model, float x, float y, float z
             v.model        = model;
             v.state.pos[0] = x; v.state.pos[1] = y; v.state.pos[2] = z;
             v.state.rot[3] = 1.0f;
-            v.state.vflags = VF_IS_AI;
-            v.speed_target = m_speed_limit;
-            v.active       = true;
+            v.state.vflags      = VF_IS_AI;
+            v.speed_personality = 0.70f + 0.40f * ((float)(nextRng() % 1000) / 1000.0f);
+            v.speed_target      = m_speed_limit;
+            v.active            = true;
             planPath(v);
             spdlog::info("AI: Spawned {} at {:.1f},{:.1f},{:.1f}", model, x, y, z);
             return;
@@ -500,8 +557,9 @@ void AITraffic::setCount(int count) {
 }
 void AITraffic::setSpeedLimit(float mps) {
     m_speed_limit = mps;
+    // Update the hard cap on active vehicles but leave their personality intact.
     for (auto& v : m_vehicles) if (v.active) v.speed_target = mps;
-    spdlog::info("AI: Speed limit = {:.1f} m/s", mps);
+    spdlog::info("AI: Speed cap = {:.1f} m/s (0 = unlimited)", mps);
 }
 void AITraffic::setMode(const std::string& mode) {
     m_mode = mode;
