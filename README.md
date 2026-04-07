@@ -141,13 +141,6 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cma
 cmake --build build -j$(nproc)
 ```
 
-### Docker (master server)
-
-```bash
-cd server
-docker compose up -d
-```
-
 ### Docker (dedicated game server)
 
 ```bash
